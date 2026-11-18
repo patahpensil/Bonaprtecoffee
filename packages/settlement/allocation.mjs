@@ -14,7 +14,7 @@ export function allocate(amount, entries) {
   });
   const total = rows.reduce((sum, row) => sum + row.weight, 0n);
   if (amount > total) throw new RangeError('Allocation exceeds balance');
-  if (total === 0n) return rows.map(({id}) => ({id, amount: 0n}));
+  if (total === 0n) return rows.sort((a,b)=>a.id < b.id ? -1 : 1).map(({id}) => ({id, amount: 0n}));
   const ranked = rows.map(({id,weight}) => ({id, amount: amount * weight / total, remainder: amount * weight % total}));
   let left = amount - ranked.reduce((sum,row)=>sum+row.amount,0n);
   ranked.sort((a,b)=> a.remainder === b.remainder ? (a.id < b.id ? -1 : 1) : (a.remainder > b.remainder ? -1 : 1));
