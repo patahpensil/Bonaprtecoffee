@@ -24,7 +24,7 @@ export class OfflineModel {
       return { id, sequence, acknowledged: true };
     }
     if (sequence !== this.#sequence + 1) throw new Error('sequence conflict');
-    if ([...this.#primary.entries()].some(([key, record]) => key !== id && record.state !== 'COMMITTED')) {
+    if ([...this.#primary.entries()].some(([key, record]) => key !== id && (record.state !== 'COMMITTED' || this.#gateway.get(key)?.state !== 'COMMITTED'))) {
       throw new Error('pending recovery');
     }
     const record = { hash, sequence, amount, state: 'PREPARED' };
