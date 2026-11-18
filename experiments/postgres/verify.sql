@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
 INSERT INTO ledger.outlet VALUES ('00000000-0000-0000-0000-000000000001'), ('00000000-0000-0000-0000-000000000002');
+INSERT INTO ledger.authority SELECT id,1 FROM ledger.outlet;
 CREATE ROLE ledger_a LOGIN PASSWORD 'test-only-a' IN ROLE ledger_runtime;
 CREATE ROLE ledger_b LOGIN PASSWORD 'test-only-b' IN ROLE ledger_runtime;
 CREATE ROLE ledger_unmapped LOGIN PASSWORD 'test-only-u' IN ROLE ledger_runtime;
@@ -20,18 +21,17 @@ BEGIN;
 DO $$ BEGIN
  IF (SELECT count(*) FROM ledger.receipt) <> 1 THEN RAISE EXCEPTION 'Own receipt unavailable'; END IF;
  BEGIN
- INSERT INTO ledger.receipt SELECT * FROM ledger.receipt;
- RAISE EXCEPTION 'Duplicate accepted';
- EXCEPTION WHEN unique_violation THEN NULL; END;
+ IF (ledger.record_receipt('00000000-0000-0000-0000-000000000011',1,1,100,decode(repeat('ab',32),'hex'))).amount <> 100 THEN RAISE EXCEPTION 'Replay failed'; END IF;
+ END;
  BEGIN
- INSERT INTO ledger.receipt VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000012',1,1,100,decode(repeat('ab',32),'hex'));
+ PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000012',1,1,100,decode(repeat('ab',32),'hex'));
  RAISE EXCEPTION 'Sequence duplicate accepted';
  EXCEPTION WHEN unique_violation THEN NULL; END;
  FOR i IN 1..5 LOOP
  BEGIN
- INSERT INTO ledger.receipt VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000012',CASE WHEN i=3 THEN 0 ELSE 1 END,CASE WHEN i=4 THEN 0 ELSE 2 END,CASE WHEN i=1 THEN -1 WHEN i=2 THEN 0 ELSE 100 END,decode(repeat('ab',CASE WHEN i=5 THEN 31 ELSE 32 END),'hex'));
+ PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000012',CASE WHEN i=3 THEN 0 ELSE 1 END,CASE WHEN i=4 THEN 0 ELSE 2 END,CASE WHEN i=1 THEN -1 WHEN i=2 THEN 0 ELSE 100 END,decode(repeat('ab',CASE WHEN i=5 THEN 31 ELSE 32 END),'hex'));
  RAISE EXCEPTION 'Invalid boundary accepted: %', i;
- EXCEPTION WHEN check_violation THEN NULL; END;
+ EXCEPTION WHEN check_violation OR invalid_parameter_value THEN NULL; END;
  END LOOP;
  BEGIN
  UPDATE ledger.receipt SET amount=200;
@@ -46,6 +46,16 @@ DO $$ BEGIN
  RAISE EXCEPTION 'Mapping update accepted';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
+DO $audit$ BEGIN
+ BEGIN
+ PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000011',1,1,101,decode(repeat('ab',32),'hex'));
+ RAISE EXCEPTION 'Changed replay accepted';
+ EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ BEGIN
+ PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000012',2,2,100,decode(repeat('ab',32),'hex'));
+ RAISE EXCEPTION 'Inactive epoch accepted';
+ EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END $audit$;
 SET LOCAL app.outlet_id = '00000000-0000-0000-0000-000000000002';
 DO $$ BEGIN
  IF ledger.authorized_outlet() <> '00000000-0000-0000-0000-000000000001'::uuid THEN RAISE EXCEPTION 'Scope forged'; END IF;
