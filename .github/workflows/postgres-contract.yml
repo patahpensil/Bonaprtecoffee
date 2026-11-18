@@ -1,0 +1,31 @@
+name: PostgreSQL contract
+on: [pull_request]
+permissions:
+  contents: read
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: |
+          psql -v ON_ERROR_STOP=1 -f experiments/postgres/ledger.sql
+          psql -v ON_ERROR_STOP=1 -f experiments/postgres/verify.sql
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: test-only-password
+          PGDATABASE: postgres
