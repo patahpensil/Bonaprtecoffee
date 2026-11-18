@@ -1,4 +1,5 @@
 CREATE ROLE ledger_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE ledger_executor NOLOGIN NOSUPERUSER NOBYPASSRLS;
 CREATE SCHEMA ledger;
 CREATE TABLE ledger.outlet (id uuid PRIMARY KEY);
 CREATE TABLE ledger.outlet_login (
@@ -43,17 +44,35 @@ CREATE FUNCTION ledger.record_receipt(p_command uuid,p_epoch bigint,p_sequence b
  o := ledger.authorized_outlet();
  IF o IS NULL THEN RAISE EXCEPTION 'Unauthorized outlet' USING ERRCODE='42501'; END IF;
  SELECT epoch INTO active_epoch FROM ledger.authority WHERE outlet_id=o FOR UPDATE;
- IF active_epoch IS NULL OR p_epoch IS DISTINCT FROM active_epoch THEN
- RAISE EXCEPTION 'Stale authority' USING ERRCODE='22023'; END IF;
  SELECT * INTO existing FROM ledger.receipt WHERE outlet_id=o AND command_id=p_command;
  IF FOUND THEN
  IF ROW(existing.epoch,existing.sequence,existing.amount,existing.payload_hash) IS DISTINCT FROM ROW(p_epoch,p_sequence,p_amount,p_hash) THEN
  RAISE EXCEPTION 'Command payload mismatch' USING ERRCODE='22023'; END IF;
  RETURN existing;
  END IF;
+ IF active_epoch IS NULL OR p_epoch IS DISTINCT FROM active_epoch THEN
+ RAISE EXCEPTION 'Stale authority' USING ERRCODE='22023'; END IF;
  INSERT INTO ledger.receipt VALUES (o,p_command,p_epoch,p_sequence,p_amount,p_hash) RETURNING * INTO existing;
  RETURN existing;
  END $body$;
 REVOKE ALL ON FUNCTION ledger.record_receipt(uuid,bigint,bigint,bigint,bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION ledger.record_receipt(uuid,bigint,bigint,bigint,bytea) TO ledger_runtime;
 REVOKE INSERT ON ledger.receipt FROM ledger_runtime;
+
+GRANT USAGE ON SCHEMA ledger TO ledger_executor;
+GRANT SELECT ON ledger.outlet_login TO ledger_executor;
+GRANT SELECT, UPDATE ON ledger.authority TO ledger_executor;
+GRANT SELECT, INSERT ON ledger.receipt TO ledger_executor;
+CREATE POLICY executor_scope ON ledger.receipt TO ledger_executor
+ USING (outlet_id = ledger.authorized_outlet())
+ WITH CHECK (outlet_id = ledger.authorized_outlet());
+ALTER FUNCTION ledger.authorized_outlet() OWNER TO ledger_executor;
+ALTER FUNCTION ledger.record_receipt(uuid,bigint,bigint,bigint,bytea) OWNER TO ledger_executor;
+CREATE FUNCTION ledger.guard_epoch() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $guard$
+BEGIN
+ IF NEW.outlet_id IS DISTINCT FROM OLD.outlet_id OR NEW.epoch <= OLD.epoch THEN
+ RAISE EXCEPTION 'Epoch must increase' USING ERRCODE='22023';
+ END IF;
+ RETURN NEW;
+END $guard$;
+CREATE TRIGGER monotonic_epoch BEFORE UPDATE ON ledger.authority FOR EACH ROW EXECUTE FUNCTION ledger.guard_epoch();
