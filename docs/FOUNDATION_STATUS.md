@@ -1,3 +1,6 @@
 # Foundation scope
 
 PRD MOD-20 / K-20 / SAD-C01 and C02: in-memory state machine experiment only. Tests cover simulated interruption boundaries, duplicates, invalid sequence, and handover. C03 external journal restore, real fsync, crash/restart, device identity, cryptography, database fencing and physical printer remain unverified. No production use. Node.js 24 is a provisional test runtime, not a change to the approved business requirements. All product UAT remains NOT_RUN. Public repository: do not commit secrets or customer information. No deployment.
+
+## Dual ledger experiment
+Same-host attached SQLite databases with rollback journal, FULL synchronous, shared database locking, scoped HMAC, individual admin identifier, device key version/expiry/revoke, hash chain and fail-closed mirror comparison. Keys are test-only plaintext in primary database; mirror is event evidence, not a complete recovery image. No independent failure-domain guarantee, distributed fencing, trusted clock, PostgreSQL PITR or production deployment. Full-history verification is intentionally unoptimized. Tests include process kill after ACK, not mid-commit fault injection. CI results must be verified separately. Earlier models are experimental only.
