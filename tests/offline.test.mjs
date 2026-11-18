@@ -33,3 +33,11 @@ test('gap and invalid money rejected', () => {
   assert.throws(() => model.submit({ ...command, sequence: 2 }), /sequence conflict/);
   assert.throws(() => model.submit({ ...command, amount: 0.5 }), /invalid command/);
 });
+
+test('different command cannot reuse incomplete sequence', () => {
+  const model = new OfflineModel('tablet-a');
+  assert.throws(() => model.submit(command, 'primary-commit'));
+  assert.throws(() => model.submit({ ...command, id: 'other' }), /pending recovery/);
+  model.submit(command);
+  assert.equal(model.snapshot().total, 25000n);
+});
