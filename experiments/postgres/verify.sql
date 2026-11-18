@@ -35,7 +35,8 @@ DO $$ BEGIN
  BEGIN
  PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000012',CASE WHEN i=3 THEN 0 ELSE 1 END,CASE WHEN i=4 THEN 0 ELSE 2 END,CASE WHEN i=1 THEN -1 WHEN i=2 THEN 0 ELSE 100 END,decode(repeat('ab',CASE WHEN i=5 THEN 31 ELSE 32 END),'hex'));
  RAISE EXCEPTION 'Invalid boundary accepted: %', i;
- EXCEPTION WHEN check_violation OR invalid_parameter_value THEN NULL; END;
+ EXCEPTION WHEN check_violation THEN IF i=3 THEN RAISE; END IF;
+ WHEN invalid_parameter_value THEN IF i<>3 THEN RAISE; END IF; END;
  END LOOP;
  BEGIN
  UPDATE ledger.receipt SET amount=200;
@@ -103,3 +104,33 @@ DO $rotation$ BEGIN
  IF (SELECT count(*) FROM ledger.receipt) <> 1 THEN RAISE EXCEPTION 'Outlet isolation failed'; END IF;
 END $rotation$;
 \echo Ledger schema checks passed
+
+\setenv PGPASSWORD test-only-password
+\connect postgres postgres
+DO $ownercheck$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_roles r ON r.oid=p.proowner WHERE p.pronamespace='ledger'::regnamespace AND p.prosecdef AND (r.rolsuper OR r.rolbypassrls OR r.rolcanlogin)) THEN RAISE EXCEPTION 'Excessive function owner privileges'; END IF;
+ BEGIN
+ UPDATE ledger.authority SET epoch=1 WHERE outlet_id='00000000-0000-0000-0000-000000000002';
+ RAISE EXCEPTION 'Epoch downgrade accepted';
+ EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END $ownercheck$;
+UPDATE ledger.authority SET epoch=3 WHERE outlet_id='00000000-0000-0000-0000-000000000002';
+\setenv PGPASSWORD test-only-b
+\connect postgres ledger_b
+DO $replay$ BEGIN
+ IF (ledger.record_receipt('00000000-0000-0000-0000-000000000012',2,1,100,decode(repeat('ab',32),'hex'))).epoch <> 2 THEN RAISE EXCEPTION 'Historical replay failed'; END IF;
+ FOR i IN 1..5 LOOP
+ BEGIN
+ PERFORM ledger.record_receipt(CASE WHEN i=1 THEN NULL ELSE '00000000-0000-0000-0000-000000000014'::uuid END,CASE WHEN i=2 THEN NULL ELSE 3 END,CASE WHEN i=3 THEN NULL ELSE 2 END,CASE WHEN i=4 THEN NULL ELSE 100 END,CASE WHEN i=5 THEN NULL ELSE decode(repeat('ab',32),'hex') END);
+ RAISE EXCEPTION 'Null accepted: %',i;
+ EXCEPTION WHEN not_null_violation THEN IF i=2 THEN RAISE; END IF;
+ WHEN invalid_parameter_value THEN IF i<>2 THEN RAISE; END IF; END;
+ END LOOP;
+END $replay$;
+BEGIN;
+SELECT ledger.record_receipt('00000000-0000-0000-0000-000000000014',3,2,100,decode(repeat('ab',32),'hex'));
+ROLLBACK;
+DO $rollback$ BEGIN
+ IF EXISTS (SELECT 1 FROM ledger.receipt WHERE command_id='00000000-0000-0000-0000-000000000014') THEN RAISE EXCEPTION 'Rollback leaked receipt'; END IF;
+END $rollback$;
+\echo Advanced privilege and rollback checks passed
