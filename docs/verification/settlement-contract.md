@@ -1,0 +1,3 @@
+# Settlement arithmetic contract — candidate SAD evidence
+Scope: MOD-09 and MOD-17 allocation arithmetic only. Before full implementation, SAD approval remains required.
+Acceptance: integer rupiah inputs represented as bigint; reject negative/invalid inputs, empty allocations, duplicate identifiers and amount exceeding total weight. Allocate proportionally by largest remainder, stable ASCII identifier tie break, exact sum and no allocation exceeding weight. Cash tender must cover settlement; change is excluded from settlement. Exhaustive small-domain tests plus large integer tests. Existing regression suite must pass. No claims about persistent payments, concurrency, bank verification, tax or production readiness.
