@@ -15,7 +15,7 @@ export class OfflineModel {
   submit(command, failAt = '') {
     const { id, epoch, device, sequence, amount } = command;
     if (epoch !== this.#epoch || device !== this.#device) throw new Error('stale authority');
-    if (typeof id !== 'string' || !id || !Number.isSafeInteger(sequence) || sequence < 1 ||
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id) || !Number.isSafeInteger(sequence) || sequence < 1 ||
         !Number.isSafeInteger(amount) || amount < 1) throw new Error('invalid command');
     const hash = digest([id, epoch, device, sequence, amount]);
     const previous = this.#primary.get(id);
