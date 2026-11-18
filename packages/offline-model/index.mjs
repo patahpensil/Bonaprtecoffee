@@ -8,6 +8,7 @@ export class OfflineModel {
   #primary = new Map();
   #gateway = new Map();
   #sequence = 0;
+  #pending = null;
   constructor(device) {
     if (typeof device !== 'string' || !device) throw new Error('invalid device');
     this.#device = device;
@@ -24,10 +25,11 @@ export class OfflineModel {
       return { id, sequence, acknowledged: true };
     }
     if (sequence !== this.#sequence + 1) throw new Error('sequence conflict');
-    if ([...this.#primary.entries()].some(([key, record]) => key !== id && (record.state !== 'COMMITTED' || this.#gateway.get(key)?.state !== 'COMMITTED'))) {
+    if (this.#pending !== null && this.#pending !== id) {
       throw new Error('pending recovery');
     }
     const record = { hash, sequence, amount, state: 'PREPARED' };
+    this.#pending = id;
     if (!previous) this.#primary.set(id, { ...record });
     if (failAt === 'primary-prepare') throw new Error('interrupted');
     if (!this.#gateway.has(id)) this.#gateway.set(id, { ...record });
@@ -36,6 +38,7 @@ export class OfflineModel {
     if (failAt === 'primary-commit') throw new Error('interrupted');
     this.#gateway.get(id).state = 'COMMITTED';
     this.#sequence = sequence;
+    this.#pending = null;
     if (failAt === 'gateway-commit') throw new Error('interrupted');
     return { id, sequence, acknowledged: true };
   }
