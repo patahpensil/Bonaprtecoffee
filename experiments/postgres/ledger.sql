@@ -7,7 +7,7 @@ CREATE TABLE ledger.outlet_login (
 );
 CREATE FUNCTION ledger.authorized_outlet() RETURNS uuid
  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog
- AS $ SELECT outlet_id FROM ledger.outlet_login WHERE login_name = session_user $;
+ AS $$ SELECT outlet_id FROM ledger.outlet_login WHERE login_name = session_user $$;
 REVOKE ALL ON FUNCTION ledger.authorized_outlet() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION ledger.authorized_outlet() TO ledger_runtime;
 CREATE TABLE ledger.receipt (
