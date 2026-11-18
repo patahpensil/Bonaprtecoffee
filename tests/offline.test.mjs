@@ -41,3 +41,21 @@ test('different command cannot reuse incomplete sequence', () => {
   model.submit(command);
   assert.equal(model.snapshot().total, 25000n);
 });
+
+test('invalid identifiers rejected', () => {
+  const model = new OfflineModel('tablet-a');
+  for (const id of ['', 'x'.repeat(129), 'a/b', '\n']) {
+    assert.throws(() => model.submit({ ...command, id }), /invalid command/);
+  }
+  assert.equal(model.snapshot().total, 0n);
+});
+test('all incomplete boundaries block competing command and handover', () => {
+  for (const boundary of ['primary-prepare', 'gateway-prepare', 'primary-commit']) {
+    const model = new OfflineModel('tablet-a');
+    assert.throws(() => model.submit(command, boundary));
+    assert.throws(() => model.submit({ ...command, id: 'other' }), /pending recovery/);
+    assert.throws(() => model.handover('tablet-b', 0), /unreconciled/);
+    model.submit(command);
+    assert.equal(model.snapshot().total, 25000n);
+  }
+});
