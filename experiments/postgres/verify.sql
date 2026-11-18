@@ -14,6 +14,10 @@ DO $$ BEGIN
  INSERT INTO ledger.receipt VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000012',1,2,100,decode(repeat('ab',32),'hex'));
  RAISE EXCEPTION 'Unmapped write accepted';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+ PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000012',1,2,100,decode(repeat('ab',32),'hex'));
+ RAISE EXCEPTION 'Unmapped function accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 \setenv PGPASSWORD test-only-a
 \connect postgres ledger_a
@@ -87,4 +91,15 @@ DO $$ BEGIN
  RAISE EXCEPTION 'Unknown outlet accepted';
  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
 END $$;
+UPDATE ledger.authority SET epoch=2 WHERE outlet_id='00000000-0000-0000-0000-000000000002';
+\setenv PGPASSWORD test-only-b
+\connect postgres ledger_b
+DO $rotation$ BEGIN
+ BEGIN
+ PERFORM ledger.record_receipt('00000000-0000-0000-0000-000000000012',1,1,100,decode(repeat('ab',32),'hex'));
+ RAISE EXCEPTION 'Old epoch accepted';
+ EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ IF (ledger.record_receipt('00000000-0000-0000-0000-000000000012',2,1,100,decode(repeat('ab',32),'hex'))).outlet_id <> '00000000-0000-0000-0000-000000000002'::uuid THEN RAISE EXCEPTION 'Wrong outlet'; END IF;
+ IF (SELECT count(*) FROM ledger.receipt) <> 1 THEN RAISE EXCEPTION 'Outlet isolation failed'; END IF;
+END $rotation$;
 \echo Ledger schema checks passed
