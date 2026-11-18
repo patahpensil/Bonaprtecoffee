@@ -34,6 +34,10 @@ jobs:
           for i in {1..8}; do test "$(cat "/tmp/receipt-$i")" = 100; done
           test "$(psql -Atc "SELECT count(*) FROM ledger.receipt WHERE command_id='00000000-0000-0000-0000-000000000013'")" = 1
           echo 'Concurrent replay checks passed'
+          python3 experiments/postgres/adversarial.py
+          sudo apt-get update -qq
+          sudo apt-get install -y pgbouncer
+          bash experiments/postgres/pool-check.sh
         env:
           PGHOST: localhost
           PGUSER: postgres
