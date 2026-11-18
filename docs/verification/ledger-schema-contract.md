@@ -1,0 +1,6 @@
+# PostgreSQL ledger schema experiment
+Candidate SAD evidence, not a production migration.
+The database principal determines outlet membership; custom session settings are ignored. Direct receipt writes are denied. The security-definer receipt function locks the outlet authority row, rejects inactive epochs, returns identical replays and rejects changed payloads. Tests use actual runtime logins, populated fixtures, invalid boundaries, epoch rotation and eight concurrent replay connections. CI pins PostgreSQL by image digest.
+Limitations: privileged administrator provisions mappings and epochs; no staff authentication, device-exclusive writer identity, monotonic handover protocol, recovery, production pooling or payment integration. Identical historical replay returns the existing receipt; new stale commands are rejected. CI execution evidence must be checked against the exact head; this document does not certify a passing run.
+
+Advanced checks observe actual lock waits before releasing competing transactions, assert one winner for conflicting payloads, reject stale writes after concurrent rotation, and exercise PgBouncer transaction pooling with distinct database principals and verified backend reuse. Pool settings and packages are experimental, not production-approved. Evidence is the actual CI log, not this description.
